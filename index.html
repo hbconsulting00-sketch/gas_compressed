@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>משחק טריוויה - גז דחוס | מסך מנחה</title>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #f0f4f8 0%, #e8f2f7 100%);
+            min-height: 100vh;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        /* Debug panel */
+        .debug-panel {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            z-index: 9999;
+            max-width: 300px;
+        }
+
+        .debug-panel div {
+            margin: 5px 0;
+        }
+
+        .debug-ok {
+            color: #66BB6A;
+        }
+
+        .debug-error {
+            color: #EF5350;
+        }
+
+        /* בועות גז ברקע */
+        .gas-bubble {
+            position: fixed;
+            background: radial-gradient(circle at 30% 30%, rgba(100, 181, 246, 0.15), rgba(66, 165, 245, 0.05));
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 0;
+            animation: float-up 15s infinite ease-in-out;
+        }
+
+        .gas-bubble:nth-child(1) {
+            width: 200px;
+            height: 200px;
+            top: 10%;
+            left: 5%;
+            animation-delay: 0s;
+        }
+
+        .gas-bubble:nth-child(2) {
+            width: 150px;
+            height: 150px;
+            top: 60%;
+            left: 80%;
+            animation-delay: 3s;
+        }
+
+        .gas-bubble:nth-child(3) {
+            width: 180px;
+            height: 180px;
+            top: 40%;
+            left: 15%;
+            animation-delay: 6s;
+        }
+
+        @keyframes float-up {
+            0%, 100% { transform: translateY(0px) scale(1); opacity: 0.6; }
+            50% { transform: translateY(-30px) scale(1.05); opacity: 0.8; }
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* כותרת */
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            background: white;
+            padding: 30px;
+            border-radius: 25px;
+            box-shadow: 0 8px 30px rgba(66, 165, 245, 0.15);
+        }
+
+        .header h1 {
+            font-size: 3em;
+            color: #1976D2;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        .header h1::before,
+        .header h1::after {
+            content: "💨";
+            font-size: 0.7em;
+        }
+
+        .subtitle {
+            color: #546E7A;
+            font-size: 1.2em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .n2-badge {
+            background: linear-gradient(135deg, #42A5F5, #1976D2);
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+
+        /* מסך לובי */
+        #lobby {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: white;
+            padding: 35px;
+            border-radius: 25px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+        }
+
+        .card h2 {
+            color: #1976D2;
+            margin-bottom: 25px;
+            font-size: 1.8em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        #qrcode {
+            text-align: center;
+            padding: 20px;
+            background: linear-gradient(135deg, #E3F2FD, #BBDEFB);
+            border-radius: 20px;
+            margin-bottom: 20px;
+            min-height: 290px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #qrcode img {
+            max-width: 100%;
+            height: auto;
+        }
+
+        #playerUrl {
+            display: block;
+            margin-top: 15px;
+            padding: 15px;
+            background: white;
+            border-radius: 15px;
+            color: #1976D2;
+            font-weight: bold;
+            word-break: break-all;
+            font-size: 0.95em;
+        }
+
+        #playersList {
+            display: grid;
+            gap: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .player-item {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 15px;
+            background: linear-gradient(135deg, #E3F2FD, #F5F5F5);
+            border-radius: 15px;
+            transition: all 0.3s ease;
+        }
+
+        .player-avatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #42A5F5, #1976D2);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.3em;
+        }
+
+        .player-name {
+            flex: 1;
+            font-size: 1.2em;
+            color: #263238;
+            font-weight: 500;
+        }
+
+        .start-btn {
+            width: 100%;
+            padding: 20px;
+            background: linear-gradient(135deg, #66BB6A, #43A047);
+            color: white;
+            border: none;
+            border-radius: 20px;
+            font-size: 1.5em;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 25px;
+            transition: all 0.3s ease;
+            box-shadow: 0 6px 20px rgba(67, 160, 71, 0.3);
+        }
+
+        .start-btn:hover:not(:disabled) {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(67, 160, 71, 0.4);
+        }
+
+        .start-btn:disabled {
+            background: #B0BEC5;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        /* מסך משחק */
+        #gameScreen {
+            display: none;
+        }
+
+        .simple-message {
+            background: white;
+            padding: 50px;
+            border-radius: 25px;
+            text-align: center;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+        }
+
+        .simple-message h2 {
+            color: #1976D2;
+            font-size: 2em;
+            margin-bottom: 20px;
+        }
+
+        .simple-message p {
+            color: #546E7A;
+            font-size: 1.2em;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <!-- Debug Panel -->
+    <div class="debug-panel" id="debugPanel">
+        <div style="font-weight: bold; margin-bottom: 10px;">🔍 Debug Info:</div>
+        <div id="debugFirebase">Firebase: טוען...</div>
+        <div id="debugQR">QR: טוען...</div>
+        <div id="debugQuestions">שאלות: טוען...</div>
+        <div id="debugPlayers">שחקנים: 0</div>
+    </div>
+
+    <!-- בועות גז ברקע -->
+    <div class="gas-bubble"></div>
+    <div class="gas-bubble"></div>
+    <div class="gas-bubble"></div>
+
+    <div class="container">
+        <div class="header">
+            <h1>🎯 משחק טריוויה גז דחוס</h1>
+            <div class="subtitle">
+                <span class="n2-badge">N₂</span>
+                <span>בטיחות ומודעות לעבודה עם גזים</span>
+                <span class="n2-badge">6 BAR</span>
+            </div>
+        </div>
+
+        <!-- מסך לובי -->
+        <div id="lobby">
+            <div class="card">
+                <h2>📱 הצטרפות למשחק</h2>
+                <div id="qrcode">
+                    <div style="color: #546E7A;">טוען QR...</div>
+                </div>
+                <span id="playerUrl"></span>
+            </div>
+            <div class="card">
+                <h2>👥 שחקנים (<span id="playerCount">0</span>)</h2>
+                <div id="playersList">
+                    <div style="color: #546E7A; padding: 20px; text-align: center;">
+                        ממתינים לשחקנים...
+                    </div>
+                </div>
+                <button class="start-btn" id="startBtn">🚀 התחל משחק</button>
+            </div>
+        </div>
+
+        <!-- מסך משחק -->
+        <div id="gameScreen">
+            <div class="simple-message">
+                <h2>🎮 המשחק מתחיל!</h2>
+                <p>זהו מצב דמו - הפונקציונליות המלאה תיטען בהמשך</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const debug = {
+            log: (key, message, isOk = true) => {
+                const el = document.getElementById('debug' + key);
+                if (el) {
+                    el.innerHTML = `${key}: <span class="${isOk ? 'debug-ok' : 'debug-error'}">${message}</span>`;
+                }
+                console.log(`[${key}]`, message);
+            }
+        };
+
+        // Firebase Configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyA2_sajeisUbl0S3hePbxfcZMKHnfO8mX8",
+            authDomain: "hb-ergonomics.firebaseapp.com",
+            databaseURL: "https://hb-ergonomics-default-rtdb.firebaseio.com",
+            projectId: "hb-ergonomics",
+            storageBucket: "hb-ergonomics.firebasestorage.app",
+            messagingSenderId: "999618112514",
+            appId: "1:999618112514:web:0c9da1f0b448a28aa48b1b"
+        };
+
+        let db;
+        const gameId = 'game_' + Date.now();
+
+        // בדיקת Firebase
+        try {
+            firebase.initializeApp(firebaseConfig);
+            db = firebase.database();
+            
+            // בדיקת חיבור
+            db.ref('.info/connected').on('value', (snap) => {
+                if (snap.val() === true) {
+                    debug.log('Firebase', '✅ מחובר', true);
+                } else {
+                    debug.log('Firebase', '❌ לא מחובר', false);
+                }
+            });
+        } catch (error) {
+            debug.log('Firebase', '❌ שגיאה: ' + error.message, false);
+            console.error('Firebase Error:', error);
+        }
+
+        // טעינת שאלות
+        fetch('questions.json')
+            .then(res => {
+                if (!res.ok) throw new Error('לא נמצא questions.json');
+                return res.json();
+            })
+            .then(data => {
+                debug.log('Questions', `✅ נטענו ${data.questions.length} שאלות`, true);
+            })
+            .catch(error => {
+                debug.log('Questions', '❌ ' + error.message, false);
+            });
+
+        // יצירת QR Code
+        const baseUrl = 'https://hbconsulting00-sketch.github.io/gas_compressed/';
+        const playerUrl = baseUrl + 'player.html?game=' + gameId;
+        document.getElementById('playerUrl').textContent = playerUrl;
+
+        // בדיקה אם QRCode קיים
+        if (typeof QRCode !== 'undefined') {
+            try {
+                const qrcodeContainer = document.getElementById('qrcode');
+                qrcodeContainer.innerHTML = ''; // ניקוי
+                
+                new QRCode(qrcodeContainer, {
+                    text: playerUrl,
+                    width: 250,
+                    height: 250,
+                    colorDark: '#1976D2',
+                    colorLight: '#FFFFFF',
+                    correctLevel: QRCode.CorrectLevel.H
+                });
+                
+                debug.log('QR', '✅ נוצר בהצלחה', true);
+            } catch (error) {
+                debug.log('QR', '❌ שגיאה: ' + error.message, false);
+                console.error('QR Error:', error);
+            }
+        } else {
+            debug.log('QR', '❌ ספריית QRCode לא נטענה', false);
+        }
+
+        // האזנה לשחקנים
+        if (db) {
+            db.ref(`games/${gameId}/players`).on('value', (snapshot) => {
+                const players = snapshot.val() || {};
+                const playerCount = Object.keys(players).length;
+                
+                document.getElementById('playerCount').textContent = playerCount;
+                debug.log('Players', playerCount, true);
+                
+                const playersList = document.getElementById('playersList');
+                
+                if (playerCount === 0) {
+                    playersList.innerHTML = '<div style="color: #546E7A; padding: 20px; text-align: center;">ממתינים לשחקנים...</div>';
+                } else {
+                    playersList.innerHTML = '';
+                    Object.entries(players).forEach(([id, player]) => {
+                        const div = document.createElement('div');
+                        div.className = 'player-item';
+                        div.innerHTML = `
+                            <div class="player-avatar">${player.name.charAt(0).toUpperCase()}</div>
+                            <div class="player-name">${player.name}</div>
+                        `;
+                        playersList.appendChild(div);
+                    });
+                }
+            });
+        }
+
+        // התחלת משחק
+        document.getElementById('startBtn').addEventListener('click', () => {
+            document.getElementById('lobby').style.display = 'none';
+            document.getElementById('gameScreen').style.display = 'block';
+            
+            if (db) {
+                db.ref(`games/${gameId}/state`).set({
+                    status: 'playing',
+                    currentQuestion: 0
+                });
+            }
+        });
+    </script>
+</body>
+</html>

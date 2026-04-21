@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>משחק טריוויה - גז דחוס | שחקן</title>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #f0f4f8 0%, #e8f2f7 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* בועות גז ברקע */
+        .gas-bubble {
+            position: fixed;
+            background: radial-gradient(circle at 30% 30%, rgba(100, 181, 246, 0.15), rgba(66, 165, 245, 0.05));
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 0;
+            animation: float-up 15s infinite ease-in-out;
+        }
+
+        .gas-bubble:nth-child(1) {
+            width: 150px;
+            height: 150px;
+            top: 10%;
+            left: 5%;
+            animation-delay: 0s;
+        }
+
+        .gas-bubble:nth-child(2) {
+            width: 120px;
+            height: 120px;
+            top: 70%;
+            right: 10%;
+            animation-delay: 5s;
+        }
+
+        .gas-bubble:nth-child(3) {
+            width: 100px;
+            height: 100px;
+            top: 40%;
+            right: 5%;
+            animation-delay: 10s;
+        }
+
+        @keyframes float-up {
+            0%, 100% { transform: translateY(0px) scale(1); opacity: 0.6; }
+            50% { transform: translateY(-20px) scale(1.08); opacity: 0.9; }
+        }
+
+        .container {
+            width: 100%;
+            max-width: 500px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* מסך כניסה */
+        #loginScreen {
+            background: white;
+            padding: 40px;
+            border-radius: 30px;
+            box-shadow: 0 10px 40px rgba(66, 165, 245, 0.2);
+            text-align: center;
+        }
+
+        .logo {
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            color: #1976D2;
+            font-size: 2em;
+            margin-bottom: 15px;
+        }
+
+        .subtitle {
+            color: #546E7A;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .n2-badge {
+            background: linear-gradient(135deg, #42A5F5, #1976D2);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 15px;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+
+        input {
+            width: 100%;
+            padding: 18px;
+            border: 3px solid #E3F2FD;
+            border-radius: 20px;
+            font-size: 1.2em;
+            text-align: center;
+            margin-bottom: 20px;
+            transition: all 0.3s ease;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #42A5F5;
+            box-shadow: 0 0 0 4px rgba(66, 165, 245, 0.1);
+        }
+
+        button {
+            width: 100%;
+            padding: 18px;
+            background: linear-gradient(135deg, #66BB6A, #43A047);
+            color: white;
+            border: none;
+            border-radius: 20px;
+            font-size: 1.3em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 6px 20px rgba(67, 160, 71, 0.3);
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(67, 160, 71, 0.4);
+        }
+
+        button:disabled {
+            background: #B0BEC5;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        /* מסך המתנה */
+        #waitingScreen {
+            display: none;
+            background: white;
+            padding: 50px 40px;
+            border-radius: 30px;
+            box-shadow: 0 10px 40px rgba(66, 165, 245, 0.2);
+            text-align: center;
+        }
+
+        .spinner {
+            width: 80px;
+            height: 80px;
+            margin: 30px auto;
+            border: 8px solid #E3F2FD;
+            border-top: 8px solid #42A5F5;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .waiting-text {
+            font-size: 1.5em;
+            color: #546E7A;
+            margin-top: 20px;
+        }
+
+        /* מסך שאלה */
+        #questionScreen {
+            display: none;
+            background: white;
+            padding: 30px;
+            border-radius: 30px;
+            box-shadow: 0 10px 40px rgba(66, 165, 245, 0.2);
+        }
+
+        .question-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+            padding-bottom: 20px;
+            border-bottom: 3px solid #E3F2FD;
+        }
+
+        .question-number {
+            background: linear-gradient(135deg, #42A5F5, #1976D2);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+
+        .timer-circle {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: white;
+            border: 5px solid #42A5F5;
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #1976D2;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(66, 165, 245, 0.2);
+        }
+
+        .timer-circle.warning {
+            border-color: #FF9800;
+        }
+
+        .timer-circle.danger {
+            border-color: #F44336;
+            animation: pulse-danger 0.5s infinite;
+        }
+
+        @keyframes pulse-danger {
+            0%, 100% { box-shadow: 0 4px 15px rgba(244, 67, 54, 0.3); }
+            50% { box-shadow: 0 4px 25px rgba(244, 67, 54, 0.7); }
+        }
+
+        .question-text {
+            font-size: 1.8em;
+            color: #263238;
+            margin-bottom: 30px;
+            line-height: 1.4;
+            text-align: center;
+        }
+
+        .answers {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .answer-btn {
+            padding: 22px;
+            border-radius: 20px;
+            font-size: 1.3em;
+            font-weight: 600;
+            text-align: center;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: white;
+        }
+
+        .answer-btn.option-a {
+            background: linear-gradient(135deg, #EF5350, #E53935);
+        }
+
+        .answer-btn.option-b {
+            background: linear-gradient(135deg, #42A5F5, #1976D2);
+        }
+
+        .answer-btn.option-c {
+            background: linear-gradient(135deg, #FFA726, #FB8C00);
+        }
+
+        .answer-btn.option-d {
+            background: linear-gradient(135deg, #AB47BC, #8E24AA);
+        }
+
+        .answer-btn:hover:not(:disabled) {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+        }
+
+        .answer-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .answer-btn.selected {
+            transform: scale(0.98);
+            box-shadow: inset 0 4px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        /* ניקוד אישי */
+        .personal-score {
+            background: linear-gradient(135deg, #E3F2FD, #F5F5F5);
+            padding: 20px;
+            border-radius: 20px;
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .score-label {
+            color: #546E7A;
+            font-size: 1em;
+            margin-bottom: 8px;
+        }
+
+        .score-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #1976D2;
+        }
+
+        .score-bonus {
+            color: #66BB6A;
+            font-size: 1.2em;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+
+        /* מסך תשובה */
+        #answerScreen {
+            display: none;
+            padding: 50px 40px;
+            border-radius: 30px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            text-align: center;
+        }
+
+        #answerScreen.correct {
+            background: linear-gradient(135deg, #66BB6A, #43A047);
+        }
+
+        #answerScreen.incorrect {
+            background: linear-gradient(135deg, #EF5350, #E53935);
+        }
+
+        .result-icon {
+            font-size: 6em;
+            margin-bottom: 20px;
+        }
+
+        .result-text {
+            color: white;
+            font-size: 2em;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+
+        .result-score {
+            color: white;
+            font-size: 1.5em;
+            opacity: 0.95;
+        }
+
+        /* מסך סיום */
+        #finishScreen {
+            display: none;
+            background: white;
+            padding: 50px 40px;
+            border-radius: 30px;
+            box-shadow: 0 10px 40px rgba(66, 165, 245, 0.2);
+            text-align: center;
+        }
+
+        .final-icon {
+            font-size: 5em;
+            margin-bottom: 20px;
+        }
+
+        .final-text {
+            color: #1976D2;
+            font-size: 2em;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+
+        .final-score {
+            background: linear-gradient(135deg, #E3F2FD, #F5F5F5);
+            padding: 30px;
+            border-radius: 20px;
+            margin-bottom: 20px;
+        }
+
+        .final-score-label {
+            color: #546E7A;
+            font-size: 1.2em;
+            margin-bottom: 10px;
+        }
+
+        .final-score-value {
+            font-size: 3.5em;
+            font-weight: bold;
+            color: #1976D2;
+        }
+    </style>
+</head>
+<body>
+    <!-- בועות גז ברקע -->
+    <div class="gas-bubble"></div>
+    <div class="gas-bubble"></div>
+    <div class="gas-bubble"></div>
+
+    <div class="container">
+        <!-- מסך כניסה -->
+        <div id="loginScreen">
+            <div class="logo">💨</div>
+            <h1>משחק טריוויה גז דחוס</h1>
+            <div class="subtitle">
+                <span class="n2-badge">N₂</span>
+                <span>בטיחות ומודעות</span>
+            </div>
+            <input type="text" id="nameInput" placeholder="הזן את שמך" maxlength="20" />
+            <button id="joinBtn">הצטרף למשחק 🚀</button>
+        </div>
+
+        <!-- מסך המתנה -->
+        <div id="waitingScreen">
+            <h2 style="color: #1976D2; font-size: 2em; margin-bottom: 20px;">מחכים להתחלה...</h2>
+            <div class="spinner"></div>
+            <div class="waiting-text">המנחה יתחיל בקרוב</div>
+        </div>
+
+        <!-- מסך שאלה -->
+        <div id="questionScreen">
+            <div class="question-header">
+                <span class="question-number" id="questionNumber">שאלה 1</span>
+                <div class="timer-circle" id="timerCircle">
+                    <span id="timerText">30</span>
+                </div>
+            </div>
+            <div class="question-text" id="questionText"></div>
+            <div class="answers" id="answersContainer"></div>
+            <div class="personal-score">
+                <div class="score-label">הניקוד שלך</div>
+                <div class="score-value" id="myScore">0</div>
+                <div class="score-bonus" id="lastBonus" style="display: none;"></div>
+            </div>
+        </div>
+
+        <!-- מסך תשובה -->
+        <div id="answerScreen">
+            <div class="result-icon" id="resultIcon"></div>
+            <div class="result-text" id="resultText"></div>
+            <div class="result-score" id="resultScore"></div>
+        </div>
+
+        <!-- מסך סיום -->
+        <div id="finishScreen">
+            <div class="final-icon">🎉</div>
+            <div class="final-text">המשחק הסתיים!</div>
+            <div class="final-score">
+                <div class="final-score-label">הניקוד הסופי שלך</div>
+                <div class="final-score-value" id="finalScore">0</div>
+            </div>
+            <div style="color: #546E7A; font-size: 1.2em;">תודה על ההשתתפות! 💙</div>
+        </div>
+    </div>
+
+    <script>
+        // Firebase Configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyBEju37qBBanjKxwHmKucVUQmzsXMpQuCs",
+            authDomain: "gascompression-efbdb.firebaseapp.com",
+            databaseURL: "https://gascompression-efbdb-default-rtdb.firebaseio.com",
+            projectId: "gascompression-efbdb",
+            storageBucket: "gascompression-efbdb.firebasestorage.app",
+            messagingSenderId: "540508121351",
+            appId: "1:540508121351:web:c8713d306b80a0009efda2"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const gameId = urlParams.get('game');
+        let playerId = null;
+        let playerName = null;
+        let currentScore = 0;
+
+        if (!gameId) {
+            alert('קישור לא תקין! סרוק את ה-QR שוב.');
+        }
+
+        // הצטרפות למשחק
+        document.getElementById('joinBtn').addEventListener('click', () => {
+            const name = document.getElementById('nameInput').value.trim();
+            if (!name) {
+                alert('אנא הזן שם');
+                return;
+            }
+
+            playerName = name;
+            playerId = 'player_' + Date.now();
+
+            db.ref(`games/${gameId}/players/${playerId}`).set({
+                name: playerName,
+                score: 0,
+                joinedAt: Date.now()
+            });
+
+            document.getElementById('loginScreen').style.display = 'none';
+            document.getElementById('waitingScreen').style.display = 'block';
+
+            // האזנה למצב המשחק
+            db.ref(`games/${gameId}/state`).on('value', (snapshot) => {
+                const state = snapshot.val();
+                if (state && state.status === 'playing') {
+                    listenToQuestions();
+                } else if (state && state.status === 'finished') {
+                    showFinishScreen();
+                }
+            });
+        });
+
+        // האזנה לשאלות
+        function listenToQuestions() {
+            db.ref(`games/${gameId}/state/currentQuestion`).on('value', (snapshot) => {
+                const questionIndex = snapshot.val();
+                if (questionIndex !== null) {
+                    loadQuestion(questionIndex);
+                }
+            });
+        }
+
+        // טעינת שאלה
+        function loadQuestion(index) {
+            db.ref(`games/${gameId}/questions/${index}`).once('value', (snapshot) => {
+                const q = snapshot.val();
+                if (!q) return;
+
+                document.getElementById('waitingScreen').style.display = 'none';
+                document.getElementById('questionScreen').style.display = 'block';
+                document.getElementById('answerScreen').style.display = 'none';
+
+                document.getElementById('questionNumber').textContent = `שאלה ${index + 1}`;
+                document.getElementById('questionText').textContent = q.question;
+
+                const answersContainer = document.getElementById('answersContainer');
+                answersContainer.innerHTML = '';
+
+                q.answers.forEach((answer, i) => {
+                    const btn = document.createElement('button');
+                    btn.className = `answer-btn option-${String.fromCharCode(97 + i)}`;
+                    btn.textContent = answer;
+                    btn.onclick = () => submitAnswer(index, i, q.correctAnswer, q.startTime);
+                    answersContainer.appendChild(btn);
+                });
+
+                // עדכון ניקוד נוכחי
+                db.ref(`games/${gameId}/players/${playerId}/score`).on('value', (snap) => {
+                    currentScore = snap.val() || 0;
+                    document.getElementById('myScore').textContent = currentScore;
+                });
+
+                startTimer();
+
+                // האזנה לחשיפה
+                db.ref(`games/${gameId}/revealed/${index}`).on('value', (revSnap) => {
+                    const revealed = revSnap.val();
+                    if (revealed) {
+                        // בדיקה אם השחקן ענה
+                        db.ref(`games/${gameId}/answers/${index}/${playerId}`).once('value', (ansSnap) => {
+                            if (!ansSnap.exists()) {
+                                // לא ענה - הצג מסך "זמן נגמר"
+                                showAnswerFeedback(false, 0);
+                            }
+                        });
+                    }
+                });
+            });
+        }
+
+        // שליחת תשובה
+        function submitAnswer(questionIndex, answerIndex, correctAnswer, startTime) {
+            const responseTime = Date.now() - startTime;
+            const timeBonus = Math.max(0, 500 - Math.floor(responseTime / 60)); // עד 500 בונוס
+            const isCorrect = answerIndex === correctAnswer;
+            const points = isCorrect ? 500 + timeBonus : 0;
+
+            db.ref(`games/${gameId}/answers/${questionIndex}/${playerId}`).set({
+                answer: answerIndex,
+                time: responseTime,
+                points: points
+            });
+
+            if (isCorrect) {
+                db.ref(`games/${gameId}/players/${playerId}/score`).transaction((current) => {
+                    return (current || 0) + points;
+                });
+            }
+
+            // השבתת כפתורים
+            document.querySelectorAll('.answer-btn').forEach(btn => {
+                btn.disabled = true;
+                if (btn.textContent === document.querySelectorAll('.answer-btn')[answerIndex].textContent) {
+                    btn.classList.add('selected');
+                }
+            });
+
+            // רטט במכשיר נייד
+            if (navigator.vibrate) {
+                navigator.vibrate(isCorrect ? [100, 50, 100] : [200]);
+            }
+
+            showAnswerFeedback(isCorrect, points);
+        }
+
+        // הצגת משוב
+        function showAnswerFeedback(isCorrect, points) {
+            document.getElementById('questionScreen').style.display = 'none';
+            document.getElementById('answerScreen').style.display = 'block';
+
+            const answerScreen = document.getElementById('answerScreen');
+            answerScreen.className = isCorrect ? 'correct' : 'incorrect';
+
+            document.getElementById('resultIcon').textContent = isCorrect ? '✅' : '❌';
+            document.getElementById('resultText').textContent = isCorrect ? 'תשובה נכונה!' : 'תשובה שגויה';
+            document.getElementById('resultScore').textContent = isCorrect ? `+${points} נקודות` : 'אין נקודות';
+
+            if (isCorrect && points > 500) {
+                const bonus = points - 500;
+                const lastBonusEl = document.getElementById('lastBonus');
+                lastBonusEl.textContent = `+${bonus} בונוס מהירות! 🚀`;
+                lastBonusEl.style.display = 'block';
+            }
+        }
+
+        // טיימר
+        let timerInterval = null;
+        function startTimer() {
+            let timeLeft = 30;
+            const circle = document.getElementById('timerCircle');
+            const text = document.getElementById('timerText');
+
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                text.textContent = timeLeft;
+
+                circle.classList.remove('warning', 'danger');
+                if (timeLeft <= 10 && timeLeft > 5) {
+                    circle.classList.add('warning');
+                } else if (timeLeft <= 5) {
+                    circle.classList.add('danger');
+                }
+
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                }
+            }, 1000);
+        }
+
+        // מסך סיום
+        function showFinishScreen() {
+            clearInterval(timerInterval);
+            
+            document.getElementById('waitingScreen').style.display = 'none';
+            document.getElementById('questionScreen').style.display = 'none';
+            document.getElementById('answerScreen').style.display = 'none';
+            document.getElementById('finishScreen').style.display = 'block';
+
+            db.ref(`games/${gameId}/players/${playerId}/score`).once('value', (snap) => {
+                document.getElementById('finalScore').textContent = snap.val() || 0;
+            });
+        }
+    </script>
+</body>
+</html>
